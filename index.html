@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Skycast</title>
+  <meta name="description" content="Hourly and 10-day forecast with live rain radar.">
+  <meta name="theme-color" content="#EEF2F7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1320" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@300;500;600&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="loc-btn" id="locBtn" aria-label="Change location">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+      <span id="locName">Loading…</span>
+      <svg viewBox="0 0 24 24" class="ico chev"><path d="M7 10l5 5 5-5z"/></svg>
+    </button>
+    <div class="top-actions">
+      <span class="updated" id="updated"></span>
+      <button class="icon-btn" id="refreshBtn" aria-label="Refresh">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="banner" id="banner" hidden></div>
+
+    <!-- NOW -->
+    <section class="view" id="view-now" data-view="now">
+      <div class="hero" id="hero"></div>
+      <div class="alerts" id="alerts"></div>
+      <div class="card">
+        <div class="card-head"><h2>Next 24 hours</h2><button class="link" data-goto="hourly">All hours ›</button></div>
+        <div class="strip-wrap" id="nowStrip"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>This week</h2><button class="link" data-goto="week">Details ›</button></div>
+        <div id="nowWeek"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Right now</h2></div>
+        <div class="details" id="details"></div>
+      </div>
+      <button class="card radar-teaser" data-goto="radar">
+        <svg viewBox="0 0 24 24" class="ico big"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm0-14a6 6 0 1 0 6 6h-2a4 4 0 1 1-4-4zm0 4a2 2 0 1 0 2 2 2 2 0 0 0-2-2z"/></svg>
+        <span><strong>Rain radar &amp; forecast map</strong><br><small>Live precipitation loop and rain chance by area</small></span>
+        <span class="chev-r">›</span>
+      </button>
+      <p class="credit">Forecast: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · Radar: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · Alerts: NWS (US)</p>
+    </section>
+
+    <!-- HOURLY -->
+    <section class="view" id="view-hourly" data-view="hourly" hidden>
+      <div class="chips" id="dayChips"></div>
+      <div class="card">
+        <div class="chart-wrap" id="hourChart"></div>
+      </div>
+      <div class="card flush">
+        <div class="table-wrap"><table class="hours" id="hourTable"></table></div>
+      </div>
+    </section>
+
+    <!-- WEEK -->
+    <section class="view" id="view-week" data-view="week" hidden>
+      <div id="weekList"></div>
+    </section>
+
+    <!-- RADAR -->
+    <section class="view view-map" id="view-radar" data-view="radar" hidden>
+      <div id="map"></div>
+      <div class="map-ui">
+        <div class="seg" role="tablist" id="mapMode">
+          <button data-mode="radar" class="on">Radar</button>
+          <button data-mode="rain">Rain chance</button>
+          <button data-mode="precip">Amount</button>
+          <button data-mode="temp">Temp</button>
+        </div>
+        <div class="player">
+          <button class="icon-btn solid" id="playBtn" aria-label="Play">
+            <svg viewBox="0 0 24 24" class="ico" id="playIco"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <input type="range" id="timeSlider" min="0" max="0" value="0" aria-label="Time">
+          <span class="time-label" id="timeLabel">—</span>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="now" class="on"><svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 5 5 5 5 0 0 0-5-5zM2 13h2a1 1 0 0 0 0-2H2a1 1 0 0 0 0 2zm18 0h2a1 1 0 0 0 0-2h-2a1 1 0 0 0 0 2zM11 2v2a1 1 0 0 0 2 0V2a1 1 0 0 0-2 0zm0 18v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-2 0zM5.99 4.58a1 1 0 0 0-1.41 1.41l1.06 1.06a1 1 0 0 0 1.41-1.41zm12.37 12.37a1 1 0 0 0-1.41 1.41l1.06 1.06a1 1 0 0 0 1.41-1.41zm1.06-10.96a1 1 0 0 0-1.41-1.41l-1.06 1.06a1 1 0 0 0 1.41 1.41zM7.05 18.36a1 1 0 0 0-1.41-1.41l-1.06 1.06a1 1 0 0 0 1.41 1.41z"/></svg>Today</button>
+    <button data-tab="hourly"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>Hourly</button>
+    <button data-tab="week"><svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V9h14zM7 11h5v5H7z"/></svg>10-Day</button>
+    <button data-tab="radar"><svg viewBox="0 0 24 24"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9a.5.5 0 0 0-.36.48V20.5a.5.5 0 0 0 .5.5l.16-.03L9 18.9l6 2.1 5.64-1.9a.5.5 0 0 0 .36-.48V3.5a.5.5 0 0 0-.5-.5zM15 19l-6-2.11V5l6 2.11z"/></svg>Radar</button>
+  </nav>
+
+  <!-- Location / settings sheet -->
+  <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+  <div class="sheet" id="sheet" hidden role="dialog" aria-label="Locations and settings">
+    <div class="sheet-grip"></div>
+    <form id="searchForm" class="search" autocomplete="off">
+      <input type="search" id="searchInput" placeholder="Search city or ZIP code" enterkeyhint="search">
+    </form>
+    <button class="row-btn" id="gpsBtn">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M12 8a4 4 0 1 0 4 4 4 4 0 0 0-4-4zm8.94 3A9 9 0 0 0 13 3.06V1h-2v2.06A9 9 0 0 0 3.06 11H1v2h2.06A9 9 0 0 0 11 20.94V23h2v-2.06A9 9 0 0 0 20.94 13H23v-2zM12 19a7 7 0 1 1 7-7 7 7 0 0 1-7 7z"/></svg>
+      Use my current location
+    </button>
+    <div id="searchResults"></div>
+    <h3 class="sheet-h">Saved places</h3>
+    <div id="savedList"></div>
+    <h3 class="sheet-h">Units</h3>
+    <div class="settings">
+      <label>Temperature
+        <select id="setTemp"><option value="fahrenheit">°F</option><option value="celsius">°C</option></select>
+      </label>
+      <label>Wind
+        <select id="setWind"><option value="mph">mph</option><option value="kmh">km/h</option><option value="ms">m/s</option><option value="kn">knots</option></select>
+      </label>
+      <label>Rain
+        <select id="setPrecip"><option value="inch">inches</option><option value="mm">mm</option></select>
+      </label>
+      <label>Clock
+        <select id="setClock"><option value="12">12-hour</option><option value="24">24-hour</option></select>
+      </label>
+    </div>
+    <p class="install-hint" id="installHint">Tip: in Chrome or Samsung Internet, open the menu and choose <b>Add to Home screen</b> to install Skycast like an app.</p>
+    <button class="primary" id="installBtn" hidden>Install app</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
