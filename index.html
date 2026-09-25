@@ -52,10 +52,10 @@
       </div>
       <button class="card radar-teaser" data-goto="radar">
         <svg viewBox="0 0 24 24" class="ico big"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm0-14a6 6 0 1 0 6 6h-2a4 4 0 1 1-4-4zm0 4a2 2 0 1 0 2 2 2 2 0 0 0-2-2z"/></svg>
-        <span><strong>Rain radar &amp; forecast map</strong><br><small>Live precipitation loop and rain chance by area</small></span>
+        <span><strong>Rain radar &amp; forecast map</strong><br><small>Past hour and up to 18 hours ahead, plus rain chance by area</small></span>
         <span class="chev-r">›</span>
       </button>
-      <p class="credit">Forecast: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · Radar: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · Alerts: NWS (US)</p>
+      <p class="credit">Forecast: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · Radar: <a href="https://mesonet.agron.iastate.edu/" target="_blank" rel="noopener">NOAA via Iowa State IEM</a>, <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · Alerts: NWS (US)</p>
     </section>
 
     <!-- HOURLY -->
@@ -90,6 +90,7 @@
           </button>
           <input type="range" id="timeSlider" min="0" max="0" value="0" aria-label="Time">
           <span class="time-label" id="timeLabel">—</span>
+          <button class="now-btn" id="nowBtn">Now</button>
         </div>
         <div class="legend" id="legend"></div>
       </div>

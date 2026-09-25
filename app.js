@@ -601,7 +601,10 @@ function initMap() {
   map.createPane('labels'); map.getPane('labels').style.zIndex = 450; map.getPane('labels').style.pointerEvents = 'none';
   setBase();
   placeMarker();
-  map.on('moveend', () => { if (mapMode !== 'radar') loadGrid(); });
+  map.on('moveend', () => {
+    if (mapMode !== 'radar') loadGrid();
+    else if (radarLoaded && (radarSource === 'iem') !== inConus(map.getCenter().lat, map.getCenter().lng)) loadRadar();
+  });
   loadRadar();
   setInterval(() => { if (tab === 'radar' && mapMode === 'radar' && !playTimer) loadRadar(); }, 10 * 60000);
   setTimeout(() => map.invalidateSize(), 50);
@@ -611,7 +614,7 @@ function setBase() {
   if (labelLayer) map.removeLayer(labelLayer);
   const v = dark() ? 'Dark' : 'Light';
   const esri = n => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${v}_Gray_${n}/MapServer/tile/{z}/{y}/{x}`;
-  baseLayer = L.tileLayer(esri('Base'), { maxZoom: 12, attribution: 'Tiles © Esri, HERE, Garmin, © OpenStreetMap · Radar © RainViewer' }).addTo(map);
+  baseLayer = L.tileLayer(esri('Base'), { maxZoom: 12, attribution: 'Tiles © Esri, HERE, Garmin, © OpenStreetMap · Radar: NOAA/Iowa State IEM, RainViewer' }).addTo(map);
   labelLayer = L.tileLayer(esri('Reference'), { maxZoom: 12, pane: 'labels' }).addTo(map);
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => map && setBase());
@@ -622,37 +625,103 @@ function placeMarker() {
   else marker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="you-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false, zIndexOffset: 1000 }).addTo(map);
 }
 
+/* Radar timeline. Inside the continental US: Iowa Environmental Mesonet NEXRAD mosaic (past hour,
+   sharp at every zoom) followed by NOAA HRRR simulated radar (future, up to 18 h). Elsewhere:
+   RainViewer past radar only. Tile layers are created lazily so only frames you view get downloaded. */
+const IEM = 'https://mesonet.agron.iastate.edu';
+const inConus = (lat, lon) => lat > 21 && lat < 53 && lon > -134 && lon < -60;
+let radarSource = '', nowFrame = 0;
+function futureSchedule(mins) { return mins <= 180 || (mins <= 360 && mins % 30 === 0) || mins % 60 === 0; }
 async function loadRadar() {
+  const c = map.getCenter();
   try {
-    const j = await getJSON('https://api.rainviewer.com/public/weather-maps.json');
-    const frames = [...(j.radar.past || []), ...(j.radar.nowcast || [])];
-    radarLayers.forEach(l => map.removeLayer(l));
-    radarFrames = frames; radarLayers = frames.map(f => L.tileLayer(`${j.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`, { opacity: 0, maxNativeZoom: 7, maxZoom: 12, zIndex: 300 }));
-    if (mapMode === 'radar') { radarLayers.forEach(l => l.addTo(map)); setupSlider(); showFrame(frames.length - 1); }
+    let frames;
+    if (inConus(c.lat, c.lng)) {
+      const [cur, run] = await Promise.all([
+        getJSON(`${IEM}/data/gis/images/4326/USCOMP/n0q_0.json`),
+        getJSON(`${IEM}/data/gis/images/4326/hrrr/refd_0000.json`).catch(() => null),
+      ]);
+      const t0 = Date.parse(cur.meta.valid);
+      frames = [50, 40, 30, 20, 10, 0].map(m => ({
+        time: t0 - m * 60000, future: false,
+        url: `${IEM}/cache/tile.py/1.0.0/nexrad-n0q-900913${m ? `-m${String(m).padStart(2, '0')}m` : ''}/{z}/{x}/{y}.png?v=${t0}`,
+      }));
+      nowFrame = frames.length - 1;
+      if (run) {
+        const init = Date.parse(run.model_init_utc);
+        for (let m = 15; m <= 1080; m += 15) {
+          const vt = init + m * 60000, ahead = Math.round((vt - t0) / 60000);
+          if (ahead < 10 || !futureSchedule(ahead - (ahead % 15))) continue;
+          frames.push({ time: vt, future: true, url: `${IEM}/cache/tile.py/1.0.0/hrrr::REFD-F${String(m).padStart(4, '0')}-0/{z}/{x}/{y}.png?v=${init}` });
+        }
+      }
+      radarSource = 'iem';
+    } else {
+      const j = await getJSON('https://api.rainviewer.com/public/weather-maps.json');
+      frames = [...(j.radar.past || []), ...(j.radar.nowcast || [])].map(f => ({
+        time: f.time * 1000, future: f.time * 1000 > Date.now() + 5 * 60000, native: 7,
+        url: `${j.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`,
+      }));
+      nowFrame = (j.radar.past || []).length - 1;
+      radarSource = 'rv';
+    }
+    radarLayers.forEach(l => l && map.removeLayer(l));
+    radarFrames = frames; radarLayers = frames.map(() => null);
+    const keep = frameIdx && frameIdx < frames.length && playTimer == null ? frameIdx : nowFrame;
+    if (mapMode === 'radar') { setupSlider(); showFrame(radarLoaded ? keep : nowFrame); }
+    radarLoaded = true;
   } catch { $('#timeLabel').textContent = 'Radar offline'; }
 }
+let radarLoaded = false;
+function radarLayer(k) {
+  if (!radarLayers[k]) {
+    const f = radarFrames[k];
+    radarLayers[k] = L.tileLayer(f.url, { opacity: 0, maxNativeZoom: f.native || 12, maxZoom: 12, zIndex: 300, className: 'radar-tiles' });
+  }
+  if (mapMode === 'radar' && !map.hasLayer(radarLayers[k])) radarLayers[k].addTo(map);
+  return radarLayers[k];
+}
+function fmtClock(ms) {
+  try { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: settings.clock === '12', timeZone: wx?.data?.timezone }); }
+  catch { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+}
 function showFrame(i) {
-  if (!radarLayers.length) return;
-  frameIdx = (i + radarLayers.length) % radarLayers.length;
-  radarLayers.forEach((l, k) => l.setOpacity(k === frameIdx ? .75 : 0));
+  if (!radarFrames.length) return;
+  frameIdx = (i + radarFrames.length) % radarFrames.length;
+  // preload the next two frames so playback doesn't flash empty tiles
+  [frameIdx, frameIdx + 1, frameIdx + 2].filter(k => k < radarFrames.length).forEach(radarLayer);
+  radarLayers.forEach((l, k) => l && l.setOpacity(k === frameIdx ? .75 : 0));
   $('#timeSlider').value = frameIdx;
-  const f = radarFrames[frameIdx], mins = Math.round((f.time * 1000 - Date.now()) / 60000);
+  const f = radarFrames[frameIdx], mins = Math.round((f.time - radarFrames[nowFrame].time) / 60000);
+  const rel = mins === 0 ? 'now' : Math.abs(mins) < 60 ? `${mins > 0 ? '+' : '−'}${Math.abs(mins)} min`
+    : `${mins > 0 ? '+' : '−'}${Math.floor(Math.abs(mins) / 60)} h${Math.abs(mins) % 60 ? ' ' + Math.abs(mins) % 60 + 'm' : ''}`;
   const tz = wx?.data?.timezone;
-  let tl; try { tl = new Date(f.time * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: settings.clock === '12', timeZone: tz }); } catch { tl = new Date(f.time * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
-  $('#timeLabel').textContent = `${tl} ${Math.abs(mins) < 6 ? '· now' : `· ${mins < 0 ? '' : '+'}${mins}m`}`;
+  let dayTag = '';
+  try { if (f.future && tz && new Date(f.time).toLocaleDateString('en-CA', { timeZone: tz }) !== nowKey(tz).slice(0, 10)) dayTag = new Date(f.time).toLocaleDateString('en-US', { weekday: 'short', timeZone: tz }) + ' '; } catch { }
+  $('#timeLabel').innerHTML = `${f.future ? '<span class="fc-tag">Forecast</span>' : ''}${dayTag}${fmtClock(f.time)} <small>${rel}</small>`;
+  $('#timeLabel').classList.toggle('future', !!f.future);
 }
 function setupSlider() {
   const s = $('#timeSlider');
-  if (mapMode === 'radar') { s.max = Math.max(0, radarLayers.length - 1); s.value = frameIdx; }
-  else { s.max = grid ? grid.hours.length - 1 : 0; s.value = gridIdx; }
+  if (mapMode === 'radar') { s.max = Math.max(0, radarFrames.length - 1); s.value = frameIdx; paintTrack(); }
+  else { s.max = grid ? grid.hours.length - 1 : 0; s.value = gridIdx; paintTrack(); }
+  $('#nowBtn').hidden = mapMode !== 'radar';
   renderLegend();
+}
+function paintTrack() {
+  const s = $('#timeSlider'), n = radarFrames.length - 1;
+  if (mapMode !== 'radar' || n <= 0 || nowFrame >= n) { s.style.background = ''; s.classList.remove('split'); return; }
+  const p = (nowFrame / n * 100).toFixed(1);
+  s.classList.add('split');
+  s.style.background = `linear-gradient(90deg, var(--muted) 0 ${p}%, var(--sun) ${p}% 100%)`;
 }
 $('#timeSlider').addEventListener('input', e => { stopPlay(); mapMode === 'radar' ? showFrame(+e.target.value) : showGridHour(+e.target.value); });
 $('#playBtn').addEventListener('click', () => playTimer ? stopPlay() : startPlay());
+$('#nowBtn').addEventListener('click', () => { stopPlay(); showFrame(nowFrame); });
 function startPlay() {
   $('#playIco').innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
   const step = () => {
-    if (mapMode === 'radar') { showFrame(frameIdx + 1); playTimer = setTimeout(step, frameIdx === radarLayers.length - 1 ? 1500 : 450); }
+    if (mapMode === 'radar') { showFrame(frameIdx + 1); playTimer = setTimeout(step, frameIdx === radarFrames.length - 1 || frameIdx === nowFrame ? 1500 : 500); }
     else { showGridHour((gridIdx + 1) % (grid?.hours.length || 1)); playTimer = setTimeout(step, 600); }
   };
   step();
@@ -665,9 +734,9 @@ $('#mapMode').addEventListener('click', e => {
   $$('#mapMode button').forEach(x => x.classList.toggle('on', x === b));
   if (mapMode === 'radar') {
     if (gridLayer) map.removeLayer(gridLayer);
-    radarLayers.forEach(l => l.addTo(map)); setupSlider(); showFrame(frameIdx);
+    setupSlider(); showFrame(frameIdx);
   } else {
-    radarLayers.forEach(l => map.removeLayer(l));
+    radarLayers.forEach(l => l && map.removeLayer(l));
     if (grid) { setupSlider(); showGridHour(gridIdx); }
     loadGrid();
   }
@@ -742,7 +811,12 @@ function showGridHour(i) {
 }
 function renderLegend() {
   const el = $('#legend');
-  if (mapMode === 'radar') { el.innerHTML = `<span>Light</span><span class="bar" style="background:linear-gradient(90deg,#cec087,#88ddee,#00a3e0,#007fb4,#ffee00,#ffaa00,#ff4400,#c10000,#ff77ff)"></span><span>Heavy</span><span class="snow-key"></span><span>Snow</span>`; return; }
+  if (mapMode === 'radar') {
+    el.innerHTML = radarSource === 'iem'
+      ? `<span>Light</span><span class="bar" style="background:linear-gradient(90deg,#64c8ff,#00d000,#009a00,#ffff00,#ff9800,#ff0000,#c80000,#ff00ff)"></span><span>Heavy</span><span>· 1 h ago → ${radarFrames.length ? Math.round((radarFrames[radarFrames.length - 1].time - radarFrames[nowFrame].time) / 3600000) + ' h ahead' : ''}</span>`
+      : `<span>Light</span><span class="bar" style="background:linear-gradient(90deg,#cec087,#88ddee,#00a3e0,#007fb4,#ffee00,#ffaa00,#ff4400,#c10000,#ff77ff)"></span><span>Heavy</span><span class="snow-key"></span><span>Snow</span><span>· past 2 h</span>`;
+    return;
+  }
   const sc = SCALES[mapMode];
   const g = sc.stops.map(([, c]) => c.replace(/,[\d.]+\)$/, ',1)')).join(',');
   const ends = mapMode === 'temp' ? [t(sc.stops[0][0]), t(sc.stops[sc.stops.length - 1][0])] : mapMode === 'rain' ? ['0%', '100%'] : ['Light', 'Heavy'];

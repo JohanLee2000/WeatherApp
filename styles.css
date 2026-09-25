@@ -205,7 +205,14 @@ table.hours .temp { font-weight: 600; }
 .player { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 14px; padding: 6px 12px 6px 6px; box-shadow: var(--shadow); }
 .icon-btn.solid { background: var(--rain); color: #fff; flex: none; }
 .player input[type=range] { flex: 1; accent-color: var(--rain); min-width: 0; }
-.time-label { font-size: 13px; font-weight: 600; min-width: 92px; text-align: right; font-variant-numeric: tabular-nums; }
+.player input[type=range].split { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; outline-offset: 6px; }
+.player input[type=range].split::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--rain); border: 3px solid var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.player input[type=range].split::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--rain); border: 3px solid var(--surface); }
+.time-label { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.time-label small { font-weight: 400; color: var(--muted); font-size: 11.5px; }
+.fc-tag { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--sun); }
+.now-btn { flex: none; font-size: 12.5px; font-weight: 600; padding: 6px 10px; border-radius: 99px; background: var(--surface-2); }
+.time-label { font-size: 13px; font-weight: 600; min-width: 78px; text-align: right; font-variant-numeric: tabular-nums; }
 .legend { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 10px; padding: 6px 10px; font-size: 11.5px; color: var(--muted); box-shadow: var(--shadow); }
 .legend .bar { flex: 1; height: 8px; border-radius: 4px; }
 .leaflet-container { font-family: var(--body); }
