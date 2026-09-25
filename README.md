@@ -17,11 +17,9 @@ Data sources: [Open-Meteo](https://open-meteo.com/) (forecast and air quality), 
 
 The app is just static files, so it needs to be hosted somewhere with **https**. Your phone won't give a plain http page your GPS location or let you install it as an app. Hosting on GitHub Pages is free and takes about 5 minutes with GitHub Desktop:
 
-1. Open **GitHub Desktop**. Choose **File → Add local repository…** and pick this `WeatherApp` folder. When it says the folder isn't a repository, click **create a repository**. Then click **Publish repository**, and untick "Keep this code private" (free Pages needs a public repo).
-2. On github.com, open the repo and go to **Settings → Pages**. Under "Build and deployment", choose **Deploy from a branch**, then **main** and **/(root)**, and click **Save**.
-3. After a minute or so your app is live at `https://<your-username>.github.io/<repo-name>/`.
-4. On your phone, open that link in **Chrome** or **Samsung Internet**. When it asks for your location, allow it.
-5. Install it:
+1. App is live at `https://johanlee2000.github.io/WeatherApp/`.
+2. On your phone, open that link in **Chrome** or **Samsung Internet**. When it asks for your location, allow it.
+3. Install it:
    - **Chrome**: tap ⋮ and choose **Add to Home screen**, then **Install**.
    - **Samsung Internet**: tap ≡ and choose **Add page to**, then **Home screen**.
 
